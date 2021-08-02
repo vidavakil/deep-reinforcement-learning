@@ -20,7 +20,7 @@ The task is episodic, and in order to solve the environment, the agent must get 
 
 # Description of the Implementation
 
-The main algorithm used here for training the banana-collecting agent is Deep Q-Learning, using a DQN (Deep Q-Network). Please refer to the original [paper](htps://storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf) by DeepMind for further details.
+The main algorithm used here for training the banana-collecting agent is Deep Q-Learning, using a DQN (Deep Q-Network). Please refer to the original [paper](HTTPS://storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf) by DeepMind for further details.
 
 DQN uses a Deep Neural Network to learn the optimal action-value function for Q-Learning. Recall that in Q-Learning, the update rule for the action-value of a state/action pair ```(s, a)``` that produces a reward ```r``` and a next state ```s'``` is given by the following formula, where ```0 < alpha <= 1``` is used to smooth the learning process. 
 
