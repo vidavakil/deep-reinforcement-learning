@@ -18,9 +18,10 @@ LR_CRITIC = 0.5e-5      # learning rate of the critic
 WEIGHT_DECAY = 0.0      # L2 weight decay
 NOISE_THETA = 0.15      # OUNoise theta
 NOISE_SIGMA = 0.2       # OUNoise sigma
-ACTOR_LAYER_SIZES = [256, 128]
-CRITIC_LAYER_SIZES = [256, 256, 128]
 EPSILON_PRIORITY = 1e-7 # minimum TD-error for prioritized replay
+
+ACTOR_LAYER_SIZES = [256, 128]        # layer sizes in the actor model
+CRITIC_LAYER_SIZES = [256, 256, 128]  # layer sizes in the critic model
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -48,7 +49,7 @@ class Agent():
     """Interacts with and learns from the environment."""
     
     def __init__(self, state_size, action_size, random_seed, 
-                 frame_size=1, prioritized_replay=False, parallel_agents=1,
+                 prioritized_replay=False, parallel_agents=1,
                  train_every=20, train_steps=10):
         """Initialize an Agent object.
         
@@ -57,10 +58,13 @@ class Agent():
             state_size (int): dimension of each state
             action_size (int): dimension of each action
             random_seed (int): random seed
-        """
-        
+            prioritized_replay (bool): if True, use prioritized replay. Otherwise don't
+            parallel_agents (int): number of agents running in parallel
+            train_every (int): number of steps to take before switching to train mode
+            train_steps (int): number of times to update the network in train mode
+        """       
         print(f"Agent: state_size={state_size}, action_size={action_size}")
-        print(f"frame_size={frame_size}, prioritized_replay={prioritized_replay}")
+        print(f"prioritized_replay={prioritized_replay}")
         print(f"Actor_layer_sizes={ACTOR_LAYER_SIZES}, Critic_layer_sizes={CRITIC_LAYER_SIZES}")        
         print(f"train_every={train_every}, train_steps={train_steps}")        
         print(f"lr_actor={LR_ACTOR}, lr_critic={LR_CRITIC}")
@@ -73,22 +77,21 @@ class Agent():
         self.action_size = action_size
         self.parallel_agents = parallel_agents
         self.seed = random.seed(random_seed)
-        self.frame_size = frame_size
         self.prioritized_replay = prioritized_replay
         self.train_every = train_every
         self.train_steps = train_steps
 
         # Actor Network (w/ Target Network)
-        self.actor_local = Actor(state_size * frame_size, action_size, random_seed,
+        self.actor_local = Actor(state_size, action_size, random_seed,
                                 actor_layer_sizes=ACTOR_LAYER_SIZES).to(device)
-        self.actor_target = Actor(state_size * frame_size, action_size, random_seed,
+        self.actor_target = Actor(state_size, action_size, random_seed,
                                  actor_layer_sizes=ACTOR_LAYER_SIZES).to(device)
         self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=LR_ACTOR)
 
         # Critic Network (w/ Target Network)
-        self.critic_local = Critic(state_size * frame_size, action_size, random_seed, 
+        self.critic_local = Critic(state_size, action_size, random_seed, 
                                    critic_layer_sizes=CRITIC_LAYER_SIZES).to(device)
-        self.critic_target = Critic(state_size * frame_size, action_size, random_seed,
+        self.critic_target = Critic(state_size, action_size, random_seed,
                                    critic_layer_sizes=CRITIC_LAYER_SIZES).to(device)
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
         
@@ -99,51 +102,27 @@ class Agent():
         self.noise = OUNoise(action_size * parallel_agents, random_seed)
 
         # Replay memory
-        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed, prioritized_replay=prioritized_replay)    
+        self.memory = ReplayBuffer(BUFFER_SIZE, BATCH_SIZE, random_seed, prioritized_replay=prioritized_replay)    
 
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
         
-        # Initialize the frame queue. The frame keeps the last frame_size state arrays.
-        # Each state array is parallel_agents x state_size
-        self.frame = deque(maxlen=frame_size)
         self.reset()
                         
     def reset(self, theta=NOISE_THETA, sigma=NOISE_SIGMA):
-        """Reset the noise generator, and the frame buffer."""
-        
+        """Reset the noise generator, and its parameters."""        
         self.noise.reset(theta, sigma)
-        for i in range(self.frame_size):
-            self.frame.append(np.zeros((self.parallel_agents, self.state_size)).astype(float)) 
-
-    def augment_state(self, state):
-        """Add the latest state to the frame, and return concatenation of the 
-        states in the frame as a frame.
-        
-        Params
-        ======
-            state (array_like): of shape (parallel_agents, state_size)
-        """
-        self.frame.append(state)
-        frame = np.concatenate(self.frame, -1)
-#        assert(state.shape == (self.parallel_agents, self.state_size))
-#        assert(frame.shape == (self.parallel_agents, self.frame_size * self.state_size))
-        return frame
        
-    def act(self, state, add_noise=True):
-        """Returns actions for given state as per current policy."""
-        
-        # a state has shape (parallel_agents, state_size)
-        # a frame has shape (parallel_agents, frame_size * state_size)
-        frame = torch.from_numpy(self.augment_state(state)).float().to(device) 
+    def act(self, state):
+        """Returns actions for given state as per current policy."""        
+        state = torch.from_numpy(state).float().to(device)
+         
         self.actor_local.eval()
         with torch.no_grad():
-            action = self.actor_local(frame).cpu().data.numpy()
+            action = self.actor_local(state).cpu().data.numpy()
         self.actor_local.train()
-        if add_noise:
-            action += self.noise.sample().reshape((-1, self.action_size))[:len(action)]
+        action += self.noise.sample().reshape((-1, self.action_size))[:len(action)]
         return np.clip(action, -1, 1)
-
     
     def step(self, state, action, reward, next_state, done, alpha=0.0, beta=0.0):
         """Update the agent based on the taken step.
@@ -152,18 +131,9 @@ class Agent():
         
         Params
         =====
-            alpha (float): alpha power used for importance sampling priorities
-            beta (float): beta power used for importance sampling weights
-        """
-        
-        # Create a frame from the last frame_size states to store in memory.
-        # Note that each entry in self.frame has shape (parallel_agents, state_size)
-        current_frame = np.concatenate(self.frame, -1) # note that state better be the last item stored in self.frame
-        next_frame = self.frame.copy()
-        next_frame.append(next_state)
-        next_frame = np.concatenate(next_frame, -1)
-#        assert(next_frame.shape == (self.parallel_agents, self.frame_size * self.state_size))
-        
+            alpha (float): the alpha parameter used in importance sampling
+            beta (float): the beta parameter used in importance sampling
+        """                
         # Choose an error for these experiences
         if self.prioritized_replay:
             # Set the error for this experience to be equal to the highest error in the replay buffer.
@@ -172,7 +142,7 @@ class Agent():
             error = None
             
         # Save experiences into replay buffer, along their errors
-        for s, a, r, n_s, d in zip(current_frame, action, reward, next_frame, done):
+        for s, a, r, n_s, d in zip(state, action, reward, next_state, done):
             self.memory.add(s, a, r, n_s, d, error)
                     
         # Learn every train_every time steps.
@@ -184,7 +154,6 @@ class Agent():
                 for _ in range(self.train_steps):
                     experiences, indices, priorities = self.memory.sample(alpha=alpha)
                     self.learn(experiences, indices, priorities, GAMMA, beta=beta)
-
 
     def learn(self, experiences, indices, priorities, gamma, beta):
         """Update policy and value parameters using given batch of experience tuples.
@@ -199,9 +168,8 @@ class Agent():
             indices (int): index of experiences in the replay buffer
             priorities (float): priority of experiences in the replay buffer
             gamma (float): discount factor
-            beta (float): beta power used for importance sampling weights
+            beta (float): the beta parameter used in importance sampling
         """
-
         states, actions, rewards, next_states, dones = experiences
 
         # ---------------------------- update critic ---------------------------- #
@@ -246,11 +214,9 @@ class Agent():
         # ----------------------- update target networks ----------------------- #
         self.soft_update_targets()
 
-
     def soft_update_targets(self, tau=TAU):
         self.soft_update(self.critic_local, self.critic_target, tau)
-        self.soft_update(self.actor_local, self.actor_target, tau) 
-        
+        self.soft_update(self.actor_local, self.actor_target, tau)         
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -261,7 +227,7 @@ class Agent():
             local_model: PyTorch model (weights will be copied from)
             target_model: PyTorch model (weights will be copied to)
             tau (float): interpolation parameter 
-        """
+        """        
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
 
@@ -270,21 +236,31 @@ class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
     def __init__(self, size, seed, mu=0., theta=NOISE_THETA, sigma=NOISE_SIGMA):
-        """Initialize parameters and noise process."""
+        """Initialize parameters and noise process.
+        
+        Params
+        ======
+            size (int): number of independent noise processes
+            seed (int): random seed
+            mu (float): mu parameter of the noise
+            theta (flaot): theta parameter of the noise
+            sigma (float): sigma parameter of the noise
+        """        
         self.size = size
         self.mu = mu * np.ones(size)
         self.seed = random.seed(seed)
         self.reset(theta, sigma)
 
     def reset(self, theta=NOISE_THETA, sigma=NOISE_SIGMA):
-        """Reset the internal state (= noise) to mean (mu), 
-        and decay the theta and sigma parameters."""
+        """Reset the internal state (= noise) to mean (mu). 
+        Reset the theta and sigma parameters of the noise.
+        """        
         self.state = copy.copy(self.mu)
         self.theta = theta
         self.sigma = sigma
 
     def sample(self):
-        """Update internal state and return it as a noise sample."""
+        """Update the internal state and return it as a noise sample."""        
         x = self.state
         noise = np.random.standard_normal(self.size)
         dx = self.theta * (self.mu - x) + self.sigma * noise
@@ -292,17 +268,18 @@ class OUNoise:
         return self.state
 
 class ReplayBuffer:
-    """Fixed-size buffer to store experience tuples."""
+    """Fixed-size circular buffer to store experience tuples."""
 
-    def __init__(self, action_size, buffer_size, batch_size, seed, prioritized_replay=False):
+    def __init__(self, buffer_size, batch_size, seed, prioritized_replay=False):
         """Initialize a ReplayBuffer object.
         Params
         ======
             buffer_size (int): maximum size of buffer
             batch_size (int): size of each training batch
-        """
-        self.action_size = action_size
-        self.memory = deque(maxlen=buffer_size)  # internal memory (deque)
+            seed (int): random seed
+            prioritized_replay (bool): if True, use prioritized replay. Otherwise don't.
+        """        
+        self.memory = deque(maxlen=buffer_size)
         self.batch_size = batch_size
         self.seed = random.seed(seed)
         self.prioritized_replay = prioritized_replay
@@ -314,6 +291,7 @@ class ReplayBuffer:
     
     def add(self, state, action, reward, next_state, done, error=0.0):
         """Add a new experience to memory."""
+        
         if self.prioritized_replay:
             e = self.experience(state, action, reward, next_state, done, error=error)
         else:
@@ -325,14 +303,14 @@ class ReplayBuffer:
         
         Params
         ======
-            alpha (float): alpha power for importance sampling priorities
-        """
+            alpha (float): the alpha parameter used in importance sampling
+        """        
         if not self.prioritized_replay:
             experiences = random.sample(self.memory, k=self.batch_size)
             indices = None
             priorities = None
         else:
-            errors = np.array([x.error for x in self.memory]) ** alpha # error
+            errors = np.array([x.error for x in self.memory]) ** alpha
             partition_function = np.sum(errors)
             errors_probability = errors / partition_function
             indices = random.choices(range(len(self.memory)), weights=errors_probability, k=self.batch_size)
@@ -352,7 +330,8 @@ class ReplayBuffer:
         return (states, actions, rewards, next_states, dones), indices, priorities
 
     def get_highest_error(self):
-        """Return the highest error of all experiences in the replay buffer."""
+        """Return the highest TD-error of all experiences in the replay buffer."""
+        
         if not self.prioritized_replay or len(self.memory) == 0:
             return EPSILON_PRIORITY
         else:
@@ -363,7 +342,7 @@ class ReplayBuffer:
         
         Params
         ======
-            indices (int): replay buffer locations that need to be updated.
+            indices (int): replay buffer locations that need to be updated
             errors (float): new values for the error field of the replay buffer locations
         """
         if self.prioritized_replay:
@@ -372,4 +351,5 @@ class ReplayBuffer:
 
     def __len__(self):
         """Return the current size of internal memory."""
+        
         return len(self.memory)
