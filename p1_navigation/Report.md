@@ -14,8 +14,8 @@ The task is episodic, and in order to solve the environment, the agent must get 
 
 [//]: # (Image References)
 
-[image0]: ./misc_images/DQN_algorithm.png
-[image1]: ./misc_images/plot_of_rewards.png
+[image0]: ./DQN_algorithm.png
+[image1]: ./plot_of_rewards.png
 
 
 # Description of the Implementation
