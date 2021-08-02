@@ -60,7 +60,7 @@ One may use another hyper-parameter for the number of training steps in each lea
 - ```GAMMA```: the discount factor in the update rule of Q-Learning that discounts future rewards
 - ```LR```: the learning rate used for training the local Q-network
 
-Using the following values for the above hyperparameters, an average score of 13.55 (over the latest 100 episodes) was achieved after 538 episodes of training (an episode ends when the environment returns a True value in response to the last action taken by the agent).
+Using the following values for the above hyperparameters, an average score of 13.52 (over the latest 100 episodes) was achieved after 394 episodes of training (an episode ends when the environment returns a True value in response to the last action taken by the agent).
 
 ```
 BUFFER_SIZE = int(1e5)
@@ -79,7 +79,7 @@ The network architecture used for the local/target Q-networks is a fully connect
 # Training Results
 
 The following shows the plot of rewards per episode of training the agent with a goal of reaching an average score of 13.5. 
-An average score of 13.55 (over the latest 100 episodes) was achieved after 538 episodes.
+An average score of 13.52 (over the latest 100 episodes) was achieved after 394 episodes.
 A model checkpoint is available in file ```checkpoint.pth```.
 
 ![alt text][image1]
