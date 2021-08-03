@@ -63,15 +63,15 @@ class Agent():
             train_every (int): number of steps to take before switching to train mode
             train_steps (int): number of times to update the network in train mode
         """       
-        print(f"Agent: state_size={state_size}, action_size={action_size}")
-        print(f"prioritized_replay={prioritized_replay}")
-        print(f"Actor_layer_sizes={ACTOR_LAYER_SIZES}, Critic_layer_sizes={CRITIC_LAYER_SIZES}")        
-        print(f"train_every={train_every}, train_steps={train_steps}")        
-        print(f"lr_actor={LR_ACTOR}, lr_critic={LR_CRITIC}")
-        print(f"buffer_size={BUFFER_SIZE}, batch_size={BATCH_SIZE}")
-        print(f"gamma={GAMMA}, tau={TAU}, weight_decay={WEIGHT_DECAY}")
-        print(f"noise_theta={NOISE_THETA}, noise_sigma={NOISE_SIGMA}")
-        print("\n")
+#         print(f"Agent: state_size={state_size}, action_size={action_size}")
+#         print(f"prioritized_replay={prioritized_replay}")
+#         print(f"Actor_layer_sizes={ACTOR_LAYER_SIZES}, Critic_layer_sizes={CRITIC_LAYER_SIZES}")        
+#         print(f"train_every={train_every}, train_steps={train_steps}")        
+#         print(f"lr_actor={LR_ACTOR}, lr_critic={LR_CRITIC}")
+#         print(f"buffer_size={BUFFER_SIZE}, batch_size={BATCH_SIZE}")
+#         print(f"gamma={GAMMA}, tau={TAU}, weight_decay={WEIGHT_DECAY}")
+#         print(f"noise_theta={NOISE_THETA}, noise_sigma={NOISE_SIGMA}")
+#         print("\n")
 
         self.state_size = state_size
         self.action_size = action_size
