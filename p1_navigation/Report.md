@@ -24,7 +24,7 @@ The main algorithm used here for training the banana-collecting agent is Deep Q-
 
 DQN uses a Deep Neural Network to learn the optimal action-value function for Q-Learning. Recall that in Q-Learning, the update rule for the action-value of a state/action pair ```(s, a)``` that produces a reward ```r``` and a next state ```s'``` is given by the following formula, where ```0 < alpha <= 1``` is used to smooth the learning process. 
 
-```Q(s, a) = (1 - alpha) Q(s, a) + alpha * (r + gamma * max(a)(Q(s', a))```
+```Q(s, a) = (1 - alpha) Q(s, a) + alpha * (r + gamma * max(a)(Q(s', a)))```
 
 Q-Learning uses a table to represent the action-value function. This is useful for problems with discrete state/action spaces where the state/action space sizes are not too large. As for problems with continuous state/action spaces, using the tabular form of Q-Learning requires discretizing the state/action space that in turn may produce nevertheless large (or still infinite) space sizes. DQN uses a deep network, instead of a table, to represent and estimate the Q function. 
 
