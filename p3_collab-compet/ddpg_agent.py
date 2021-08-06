@@ -39,10 +39,13 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def override_config(config):
     """Overrides the above global parameters used by the Agent."""
     
-    global BUFFER_SIZE, BATCH_SIZE, GAMMA, TAU, TAU_INCREASE, LR_ACTOR, LR_CRITIC 
-    global WEIGHT_DECAY, NOISE_THETA, NOISE_SIGMA, ALPHA, EPSILON_ERROR, MAXIMUM_ERROR
+    global BUFFER_SIZE, BATCH_SIZE
+    global GAMMA, TAU, TAU_INCREASE 
+    global LR_ACTOR, LR_CRITIC, WEIGHT_DECAY
+    global NOISE_THETA, NOISE_SIGMA
+    global ALPHA, EPSILON_ERROR, MAXIMUM_ERROR
     global RANDOM_ACTION_PERIOD, MINIMUM_RANDOM_ACTION_PROB
-    global ACTOR_LAYER_SIZES, CRITIC_LAYER_SIZES, EPSILON_ERROR
+    global ACTOR_LAYER_SIZES, CRITIC_LAYER_SIZES
     
     BUFFER_SIZE = config["buffer_size"]
     BATCH_SIZE = config["batch_size"]
@@ -75,13 +78,13 @@ class Agent():
             state_size (int): dimension of each state
             action_size (int): dimension of each action
             random_seed (int): random seed
-            prioritized_replay (bool): if True, use prioritized replay. Otherwise don't
-            use_ounoise (bool): if True, uses Ornstein-Uhlenbeck processes to add noise to the output of the policy
+            prioritized_replay (bool): if True, use prioritized replay.
+            use_ounoise (bool): if True, uses Ornstein-Uhlenbeck processes 
+                                to add noise to the output of the policy
             parallel_agents (int): number of agents running in parallel
             train_every (int): number of steps to take before switching to train mode
             train_steps (int): number of times to update the network in train mode
-        """
-        
+        """        
 #         print(f"Agent: state_size={state_size}, action_size={action_size}")
 #         print(f"Actor_layer_sizes={ACTOR_LAYER_SIZES}, Critic_layer_sizes={CRITIC_LAYER_SIZES}")
 #         print(f"lr_actor={LR_ACTOR}, lr_critic={LR_CRITIC}")
@@ -106,16 +109,14 @@ class Agent():
         # and alpha is applied at the time an item is added or updated.
         self.alpha = ALPHA
         
-        # The actor uses its own state and the state of the other agent
-        # to choose an action. Thus, the actor's policy is of the form
-        # a1 = Policy(s1, s2)
-        # Thus, the state size of the actor is twice as large as the state
-        # size of the agent
-        actor_state_size = self.state_size * 2
+        # The actor uses its own state only
+        actor_state_size = self.state_size
             
         # The critic evaluates the action of the actor in a context that
         # includes the states of both agents and the action that the
         # opposing agent would have taken in that combined state.
+        # Since the critic is used only during training, and training uses
+        # a self-play scheme, the critic has full access to such information.
         critic_state_size = self.state_size * 2 + self.action_size
         critic_action_size = action_size
 
@@ -131,7 +132,8 @@ class Agent():
                                    critic_layer_sizes=CRITIC_LAYER_SIZES).to(device)
         self.critic_target = Critic(critic_state_size, critic_action_size, random_seed,
                                    critic_layer_sizes=CRITIC_LAYER_SIZES).to(device)
-        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
+        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), 
+                                           lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
         
         # Copy the local networks into the target networks
         self.soft_update_targets(tau=1.0)
@@ -163,18 +165,13 @@ class Agent():
         
         Params
         ======
-            add_noise (bool): if True, add noise to the action proposed by the actor
-        """
-        
-        a1_state = state
-        a2_state = state[::-1]
-        
-        total_state = np.concatenate((a1_state, a2_state), axis=1)            
-        total_state = torch.from_numpy(total_state).float().to(device)
+            add_noise (bool): if True, add noise to the actor's policy
+        """        
+        state = torch.from_numpy(state).float().to(device)
         
         self.actor_local.eval()
         with torch.no_grad():
-            action = self.actor_local(total_state).cpu().data.numpy()
+            action = self.actor_local(state).cpu().data.numpy()
         self.actor_local.train()
         
         if add_noise:
@@ -204,11 +201,11 @@ class Agent():
         Params
         =====
             beta (float): beta power used for importance sampling weights
-        """
-        
+        """        
         # Choose an error for these experiences
         if self.prioritized_replay:
-            # Set the error for this experience to be equal to the highest error in the replay buffer.
+            # Set the error for this experience to be equal to the highest 
+            # error in the replay buffer.
             error = self.memory.get_highest_error()
         else:
             error = None
@@ -224,8 +221,9 @@ class Agent():
                 
         combined_reward = reward
                         
-        # Save experiences into replay buffer, along their errors
-        for s, a, r, n_s, d in zip(combined_state, combined_action, combined_reward, combined_next_state, done):
+        # Save experiences into the replay buffer, along with their errors
+        for s, a, r, n_s, d in zip(combined_state, combined_action, 
+                                   combined_reward, combined_next_state, done):
             self.memory.add(s, a, r, n_s, d, error)
                     
         # Learn every train_every time steps. 
@@ -252,8 +250,7 @@ class Agent():
             priorities (float): priority of experiences in the replay buffer
             gamma (float): discount factor
             beta (float): beta power used for importance sampling weights
-        """
-        
+        """        
         states, actions, rewards, next_states, dones = experiences
         
         # extract the states, next_states, and actions from the perspective
@@ -261,16 +258,11 @@ class Agent():
         a1_a2_states = states
         a1_states = states[:, :self.state_size]
         a2_states = states[:, self.state_size:]
-        a2_a1_states = torch.cat((a2_states, a1_states), dim=1)
         
         a1_a2_next_states = next_states
         a1_next_states = next_states[:, :self.state_size]
         a2_next_states = next_states[:, self.state_size:]
-        a2_a1_next_states = torch.cat((a2_next_states, a1_next_states), dim=1)
-        batched_a1a2_a2a1_next_states = torch.cat((a1_a2_next_states, a2_a1_next_states), dim=0)
-        batched_a1_a2_next_states = torch.cat((a1_next_states, a2_next_states), dim=0)
                 
-        a1_a2_actions = actions
         a1_actions = actions[:, :self.action_size]
         a2_actions = actions[:, self.action_size:]
         
@@ -280,9 +272,8 @@ class Agent():
         self.critic_target.eval()
 
         with torch.no_grad():
-            batched_a1_a2_next_actions = self.actor_target(batched_a1a2_a2a1_next_states)
-            a1_next_actions = batched_a1_a2_next_actions[:BATCH_SIZE, :]
-            a2_next_actions = batched_a1_a2_next_actions[BATCH_SIZE:, :]
+            a1_next_actions = self.actor_target(a1_next_states)
+            a2_next_actions = self.actor_target(a2_next_states) 
             a1_a2_next_states_a2_next_actions = torch.cat((a1_a2_next_states, a2_next_actions), dim=1)
             Q_targets_next = self.critic_target(a1_a2_next_states_a2_next_actions, a1_next_actions)
         
@@ -308,13 +299,14 @@ class Agent():
     
         # Update errors of sampled experiences
         if self.prioritized_replay:
-            errors = (torch.abs(Q_expected - Q_targets).squeeze().detach().to('cpu').numpy() + EPSILON_ERROR) ** self.alpha
+            errors = torch.abs(Q_expected - Q_targets).squeeze().detach().to('cpu').numpy()
+            errors = (errors + EPSILON_ERROR) ** self.alpha
             self.memory.update_errors(indices, errors)
             
         # ---------------------------- update actor ---------------------------- #
         # Compute actor loss        
-        a1_actions = self.actor_local(a1_a2_states)
-        a2_actions = self.actor_local(a2_a1_states)
+        a1_actions = self.actor_local(a1_states)
+        a2_actions = self.actor_local(a2_states)
         
         a1_a2_states_a2_actions = torch.cat((a1_a2_states, a2_actions), dim=1)
         actor_loss = -self.critic_local(a1_a2_states_a2_actions, a1_actions).mean()
@@ -326,7 +318,7 @@ class Agent():
 
         # ----------------------- update target networks ----------------------- #
         self.tau = min(5e-1, self.tau * TAU_INCREASE)
-        self.soft_update_targets(tau=self.tau)  # Note, this now needs to be done by the caller!
+        self.soft_update_targets(tau=self.tau)
 
     def soft_update_targets(self, tau=TAU):
         self.soft_update(self.critic_local, self.critic_target, tau)
@@ -397,7 +389,6 @@ class ReplayBuffer:
     
     def add(self, state, action, reward, next_state, done, error=0.0):
         """Add a new experience to memory."""
-
         e = self.experience(state, action, reward, next_state, done)
         if not self.prioritized_replay:
             self.memory.append(e)
@@ -409,8 +400,7 @@ class ReplayBuffer:
                 self.data_index = 0
     
     def sample(self):
-        """Randomly sample a batch of experiences from memory."""
-        
+        """Randomly sample a batch of experiences from memory."""        
         if not self.prioritized_replay:
             experiences = random.sample(self.memory, k=self.batch_size)
             indices = None
@@ -436,8 +426,7 @@ class ReplayBuffer:
     def get_highest_error(self):
         """Return the highest error of all experiences in the replay buffer.
         Used only for prioritized replay.
-        """
-        
+        """        
         assert(self.prioritized_replay == True)
         largest_probability = self.sum_tree.largest_item()
         if largest_probability == 0.0:

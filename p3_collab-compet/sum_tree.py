@@ -15,7 +15,6 @@ class SumTree:
         ======
             size (int): size of the data array
         """
-        
         # size needs to be a power of two
         next_power_of_two = 1
         temp = size
@@ -49,8 +48,7 @@ class SumTree:
         ======
             index (int): index of the element in the data array to be updated
             item (float): the new value to be stored at the given index
-        """
-        
+        """        
         # locate the address of the requested item in the tree
         index += self.size - 1
         
@@ -72,8 +70,7 @@ class SumTree:
         Params
         ======
             item (float): new item to be stored in the data array
-        """
-        
+        """        
         self.update(self.data_index - self.size + 1, item)            
         self.data_index += 1
         if self.data_index == 2 * self.size - 1:
@@ -120,8 +117,7 @@ class SumTree:
         Params
         ======
             sum: the cumulative sum criteria for this search
-        """
-        
+        """        
         index = 0
         while True:
             left_child = (index + 1) * 2 - 1

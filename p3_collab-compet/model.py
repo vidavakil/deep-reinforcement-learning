@@ -19,9 +19,6 @@ class Actor(nn.Module):
             seed (int): Random seed
             actor_layer_sizes (list of int): Number of nodes in each layer of the network
         """
-        
-#         print(f"Actor: state_size={state_size}, action_size={action_size}, actor_layer_sizes={actor_layer_sizes}")
-        
         super(Actor, self).__init__()
         self.seed = torch.manual_seed(seed)
         self.fc1 = nn.Linear(state_size, actor_layer_sizes[0])
@@ -47,9 +44,6 @@ class Critic(nn.Module):
             seed (int): Random seed
             critic_layer_sizes (list of int): Number of nodes in each layer of the network
         """
-
-#         print(f"Critic: state_size={state_size}, action_size={action_size}, critic_layer_sizes={critic_layer_sizes}")
-
         super(Critic, self).__init__()
         self.seed = torch.manual_seed(seed)
         self.fcs1 = nn.Linear(state_size, CRITIC_LAYER_SIZES[0])
