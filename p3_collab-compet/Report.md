@@ -17,7 +17,7 @@ A general approach for solving a multi-agent problem like this is to use self-pl
 
 The algorithm used here for training the Tennis agent is a multi-agent deep deterministic policy gradient (MADDPG), that uses a decentralized actor, centralized critic approach. Please see the original [paper](https://papers.nips.cc/paper/2017/file/68a9750337a418a86fe06c1991a1d64c-Paper.pdf) by OpenAI. The following diagram shows an overview of this approach.
 
-<img src="https://github.com/vidavakil/deep-reinforcement-learning/blob/master/p3_collab-compet/MADDPG_diagram.png" width="200" />
+<img src="https://github.com/vidavakil/deep-reinforcement-learning/blob/master/p3_collab-compet/MADDPG_diagram.png" width="600" />
 
 In this approach, the critic that is used only during training is centralized and evaluates the actor's action in a context that involves the states of both agents plus the action that the other agent would have taken in that same context. That is, the critic uses more information, that otherwise is not available to the actor, to evaluate the actor’s policy.
 
@@ -106,7 +106,7 @@ After each episode, the raw rewards received by each agent are added up to compu
 
 The following shows the plot of rewards per episode of training the agents with a goal of reaching an average score of +0.5. An average score of 0.522 (over the latest 100 episodes) was achieved after 2208 episodes. Checkpoints for the actor and critic networks are available in files ```checkpoint_actor.pth``` and ```checkpoint_critic.pth```.
 
-<img src="https://github.com/vidavakil/deep-reinforcement-learning/blob/master/p3_collab-compet/plot_of_rewards.png" width="200" />
+<img src="https://github.com/vidavakil/deep-reinforcement-learning/blob/master/p3_collab-compet/plot_of_rewards.png" width="600" />
 
 # Ideas for Future Work
 
