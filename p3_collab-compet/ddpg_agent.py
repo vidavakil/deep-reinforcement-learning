@@ -66,7 +66,7 @@ class Agent():
     """Interacts with and learns from the environment."""
     
     def __init__(self, state_size, action_size, random_seed, 
-                 actor_sees_other_state=False, critic_combines_state_action=True,
+                 critic_combines_state_action=True,
                  prioritized_replay=False, use_ounoise=True, parallel_agents=1,
                  train_every=20, train_steps=10):
         """Initialize an Agent object.
@@ -76,7 +76,6 @@ class Agent():
             state_size (int): dimension of each state
             action_size (int): dimension of each action
             random_seed (int): random seed
-            actor_sees_other_state (bool): if True, the actor's state includes both agents' states
             critic_combines_state_action (bool): if True, the critic's state includes the other agent's action
             prioritized_replay (bool): if True, use prioritized replay. Otherwise don't
             use_ounoise (bool): if True, uses Ornstein-Uhlenbeck processes to add noise to the output of the policy
@@ -88,7 +87,7 @@ class Agent():
 #         print(f"Agent: state_size={state_size}, action_size={action_size}")
 #         print(f"Actor_layer_sizes={ACTOR_LAYER_SIZES}, Critic_layer_sizes={CRITIC_LAYER_SIZES}")
 #         print(f"lr_actor={LR_ACTOR}, lr_critic={LR_CRITIC}")
-#         print(f"actor_sees_other_state={actor_sees_other_state}, critic_combines_state_action={critic_combines_state_action}")
+#         print(f"critic_combines_state_action={critic_combines_state_action}")
 #         print(f"train_every={train_every}, train_steps={train_steps}")        
 #         print(f"buffer_size={BUFFER_SIZE}, batch_size={BATCH_SIZE}")
 #         print(f"gamma={GAMMA}, tau={TAU}, weight_decay={WEIGHT_DECAY}")
@@ -99,7 +98,6 @@ class Agent():
         self.state_size = state_size
         self.action_size = action_size
         self.seed = random.seed(random_seed)
-        self.actor_sees_other_state = actor_sees_other_state
         self.critic_combines_state_action = critic_combines_state_action
         self.prioritized_replay = prioritized_replay
         self.use_ounoise = use_ounoise
@@ -113,8 +111,7 @@ class Agent():
         self.alpha = ALPHA
         
         actor_state_size = self.state_size
-        if actor_sees_other_state:
-            actor_state_size *= 2
+        actor_state_size *= 2
             
         critic_state_size = self.state_size * 2
         critic_action_size = action_size * 2
@@ -172,10 +169,7 @@ class Agent():
         a1_state = state
         a2_state = state[::-1]
         
-        if self.actor_sees_other_state:
-            total_state = np.concatenate((a1_state, a2_state), axis=1)            
-        else:
-            total_state = state            
+        total_state = np.concatenate((a1_state, a2_state), axis=1)            
         total_state = torch.from_numpy(total_state).float().to(device)
         
         self.actor_local.eval()
@@ -284,14 +278,9 @@ class Agent():
         # Get predicted next-state actions and Q values from target models
         self.actor_target.eval()
         self.critic_target.eval()
-                        
-        if self.actor_sees_other_state:
-            batched_next_states = batched_a1a2_a2a1_next_states
-        else:
-            batched_next_states = batched_a1_a2_next_states
 
         with torch.no_grad():
-            batched_a1_a2_next_actions = self.actor_target(batched_next_states)
+            batched_a1_a2_next_actions = self.actor_target(batched_a1a2_a2a1_next_states)
             a1_next_actions = batched_a1_a2_next_actions[:BATCH_SIZE, :]
             a2_next_actions = batched_a1_a2_next_actions[BATCH_SIZE:, :]
             if not self.critic_combines_state_action:                
@@ -331,14 +320,8 @@ class Agent():
             
         # ---------------------------- update actor ---------------------------- #
         # Compute actor loss        
-        if self.actor_sees_other_state:
-            a1_actions = self.actor_local(a1_a2_states)
-            a2_states = a2_a1_states
-        else:
-            a1_actions = self.actor_local(a1_states)
-            a2_states = a2_states
-            
-        a2_actions = self.actor_local(a2_states)
+        a1_actions = self.actor_local(a1_a2_states)
+        a2_actions = self.actor_local(a2_a1_states)
         
         if not self.critic_combines_state_action:
             a1_a2_actions = torch.cat((a1_actions, a2_actions), dim=1)
