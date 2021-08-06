@@ -29,7 +29,7 @@ def override_config(config):
     """Overrides the above global parameters used by the Agent."""
     
     global BUFFER_SIZE, BATCH_SIZE, GAMMA, TAU, LR_ACTOR, LR_CRITIC, WEIGHT_DECAY, NOISE_THETA
-    global NOISE_SIGMA, ACTOR_LAYER_SIZES, CRITIC_LAYER_SIZES, EPSILON_PRIORITY
+    global NOISE_SIGMA, EPSILON_PRIORITY, ACTOR_LAYER_SIZES, CRITIC_LAYER_SIZES
     
     BUFFER_SIZE = config["buffer_size"]
     BATCH_SIZE = config["batch_size"]
@@ -40,9 +40,9 @@ def override_config(config):
     WEIGHT_DECAY = config["weight_decay"]
     NOISE_THETA = config["noise_theta"]
     NOISE_SIGMA = config["noise_sigma"]
+    EPSILON_PRIORITY = config["epsilon_priority"]
     ACTOR_LAYER_SIZES = config["actor_layer_sizes"]
     CRITIC_LAYER_SIZES = config["critic_layer_sizes"]
-    EPSILON_PRIORITY = config["epsilon_priority"]
 
 
 class Agent():
