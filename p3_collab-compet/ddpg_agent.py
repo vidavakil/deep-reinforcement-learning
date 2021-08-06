@@ -66,7 +66,6 @@ class Agent():
     """Interacts with and learns from the environment."""
     
     def __init__(self, state_size, action_size, random_seed, 
-                 critic_combines_state_action=True,
                  prioritized_replay=False, use_ounoise=True, parallel_agents=1,
                  train_every=20, train_steps=10):
         """Initialize an Agent object.
@@ -76,7 +75,6 @@ class Agent():
             state_size (int): dimension of each state
             action_size (int): dimension of each action
             random_seed (int): random seed
-            critic_combines_state_action (bool): if True, the critic's state includes the other agent's action
             prioritized_replay (bool): if True, use prioritized replay. Otherwise don't
             use_ounoise (bool): if True, uses Ornstein-Uhlenbeck processes to add noise to the output of the policy
             parallel_agents (int): number of agents running in parallel
@@ -87,7 +85,6 @@ class Agent():
 #         print(f"Agent: state_size={state_size}, action_size={action_size}")
 #         print(f"Actor_layer_sizes={ACTOR_LAYER_SIZES}, Critic_layer_sizes={CRITIC_LAYER_SIZES}")
 #         print(f"lr_actor={LR_ACTOR}, lr_critic={LR_CRITIC}")
-#         print(f"critic_combines_state_action={critic_combines_state_action}")
 #         print(f"train_every={train_every}, train_steps={train_steps}")        
 #         print(f"buffer_size={BUFFER_SIZE}, batch_size={BATCH_SIZE}")
 #         print(f"gamma={GAMMA}, tau={TAU}, weight_decay={WEIGHT_DECAY}")
@@ -98,7 +95,6 @@ class Agent():
         self.state_size = state_size
         self.action_size = action_size
         self.seed = random.seed(random_seed)
-        self.critic_combines_state_action = critic_combines_state_action
         self.prioritized_replay = prioritized_replay
         self.use_ounoise = use_ounoise
         self.parallel_agents = parallel_agents
@@ -110,14 +106,18 @@ class Agent():
         # and alpha is applied at the time an item is added or updated.
         self.alpha = ALPHA
         
-        actor_state_size = self.state_size
-        actor_state_size *= 2
+        # The actor uses its own state and the state of the other agent
+        # to choose an action. Thus, the actor's policy is of the form
+        # a1 = Policy(s1, s2)
+        # Thus, the state size of the actor is twice as large as the state
+        # size of the agent
+        actor_state_size = self.state_size * 2
             
-        critic_state_size = self.state_size * 2
-        critic_action_size = action_size * 2
-        if critic_combines_state_action:
-            critic_state_size += self.action_size
-            critic_action_size = action_size
+        # The critic evaluates the action of the actor in a context that
+        # includes the states of both agents and the action that the
+        # opposing agent would have taken in that combined state.
+        critic_state_size = self.state_size * 2 + self.action_size
+        critic_action_size = action_size
 
         # Actor Network (w/ Target Network)
         self.actor_local = Actor(actor_state_size, action_size, random_seed,
@@ -283,12 +283,8 @@ class Agent():
             batched_a1_a2_next_actions = self.actor_target(batched_a1a2_a2a1_next_states)
             a1_next_actions = batched_a1_a2_next_actions[:BATCH_SIZE, :]
             a2_next_actions = batched_a1_a2_next_actions[BATCH_SIZE:, :]
-            if not self.critic_combines_state_action:                
-                a1_a2_next_actions = torch.cat((a1_next_actions, a2_next_actions), dim=1)
-                Q_targets_next = self.critic_target(a1_a2_next_states, a1_a2_next_actions)
-            else:
-                a1_a2_next_states_a2_next_actions = torch.cat((a1_a2_next_states, a2_next_actions), dim=1)
-                Q_targets_next = self.critic_target(a1_a2_next_states_a2_next_actions, a1_next_actions)
+            a1_a2_next_states_a2_next_actions = torch.cat((a1_a2_next_states, a2_next_actions), dim=1)
+            Q_targets_next = self.critic_target(a1_a2_next_states_a2_next_actions, a1_next_actions)
         
         # Adjust the target_best_next_action_value by importance sampling weights
         if self.prioritized_replay:
@@ -301,11 +297,8 @@ class Agent():
         Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
         
         # Compute critic loss
-        if not self.critic_combines_state_action:
-            Q_expected = self.critic_local(a1_a2_states, a1_a2_actions)
-        else:
-            a1_a2_states_a2_actions = torch.cat((a1_a2_states, a2_actions), dim=1)
-            Q_expected = self.critic_local(a1_a2_states_a2_actions, a1_actions)
+        a1_a2_states_a2_actions = torch.cat((a1_a2_states, a2_actions), dim=1)
+        Q_expected = self.critic_local(a1_a2_states_a2_actions, a1_actions)
         
         critic_loss = F.mse_loss(Q_expected, Q_targets)
         # Minimize the loss
@@ -323,12 +316,8 @@ class Agent():
         a1_actions = self.actor_local(a1_a2_states)
         a2_actions = self.actor_local(a2_a1_states)
         
-        if not self.critic_combines_state_action:
-            a1_a2_actions = torch.cat((a1_actions, a2_actions), dim=1)
-            actor_loss = -self.critic_local(a1_a2_states, a1_a2_actions).mean()
-        else:
-            a1_a2_states_a2_actions = torch.cat((a1_a2_states, a2_actions), dim=1)
-            actor_loss = -self.critic_local(a1_a2_states_a2_actions, a1_actions).mean()
+        a1_a2_states_a2_actions = torch.cat((a1_a2_states, a2_actions), dim=1)
+        actor_loss = -self.critic_local(a1_a2_states_a2_actions, a1_actions).mean()
 
         # Minimize the loss
         self.actor_optimizer.zero_grad()
